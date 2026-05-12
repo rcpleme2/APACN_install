@@ -420,7 +420,7 @@ def iniciar_sessao(usuario: str, senha: str, headless: bool = False) -> tuple[Pl
 
 
 def doar_lote(page: Page, cnpj_entidade: str, chaves: list[str],
-              verificar_cnpj: bool = True) -> dict:
+              verificar_cnpj: bool = True, progresso_fn=None) -> dict:
     """
     Processa um lote de chaves de acesso.
 
@@ -466,20 +466,29 @@ def doar_lote(page: Page, cnpj_entidade: str, chaves: list[str],
             log.error(str(exc))
             resultado["cnpj_invalido"] = True
             msg_cnpj = str(exc)
-            for c in chaves[idx - 1:]:
+            for i, c in enumerate(chaves[idx - 1:], start=idx):
                 resultado["chaves_com_erro"].append(c)
                 resultado["erros_com_mensagem"].append((c, msg_cnpj))
+                if progresso_fn:
+                    progresso_fn({"numero": i, "total": len(chaves),
+                                  "chave": c, "sucesso": False, "mensagem": msg_cnpj})
             resultado["erro"] += len(chaves) - idx + 1
             break
 
         if sucesso:
             resultado["sucesso"] += 1
             erros_consecutivos = 0
+            if progresso_fn:
+                progresso_fn({"numero": idx, "total": len(chaves),
+                              "chave": chave, "sucesso": True, "mensagem": ""})
         else:
             resultado["erro"] += 1
             resultado["chaves_com_erro"].append(chave)
             resultado["erros_com_mensagem"].append((chave, msg_erro))
             erros_consecutivos += 1
+            if progresso_fn:
+                progresso_fn({"numero": idx, "total": len(chaves),
+                              "chave": chave, "sucesso": False, "mensagem": msg_erro})
 
             if erros_consecutivos >= LIMITE_ERROS_CHAVE:
                 log.warning(
@@ -488,9 +497,12 @@ def doar_lote(page: Page, cnpj_entidade: str, chaves: list[str],
                 )
                 resultado["parou_por_limite_erros"] = True
                 msg_nao_proc = "Não processada (lote interrompido por erros consecutivos)"
-                for c in chaves[idx:]:
+                for i, c in enumerate(chaves[idx:], start=idx + 1):
                     resultado["chaves_com_erro"].append(c)
                     resultado["erros_com_mensagem"].append((c, msg_nao_proc))
+                    if progresso_fn:
+                        progresso_fn({"numero": i, "total": len(chaves),
+                                      "chave": c, "sucesso": False, "mensagem": msg_nao_proc})
                 resultado["erro"] += len(chaves) - idx
                 break
 

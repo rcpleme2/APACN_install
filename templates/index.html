@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APACN – Nota Paraná</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background: #f0f2f5; }
+    .card { border: none; border-radius: 14px; box-shadow: 0 2px 16px rgba(0,0,0,.09); }
+    .page { display: none; }
+    .page.ativo { display: block; }
+
+    /* Scanner */
+    #campo-scanner {
+      font-family: monospace;
+      font-size: 1.05rem;
+      letter-spacing: .05em;
+      border: 2px solid #0d6efd;
+      border-radius: 8px;
+      transition: border-color .2s;
+    }
+    #campo-scanner:focus { box-shadow: 0 0 0 .25rem rgba(13,110,253,.25); }
+
+    /* Lista de chaves */
+    .chave-item {
+      font-family: monospace;
+      font-size: .78rem;
+      word-break: break-all;
+    }
+    .chave-item .badge { font-size: .7rem; min-width: 2rem; }
+
+    /* Log de progresso */
+    #log-progresso {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: monospace;
+      font-size: .82rem;
+      border-radius: 8px;
+      height: 340px;
+      overflow-y: auto;
+      padding: 12px 14px;
+    }
+    .log-ok   { color: #4ec94e; }
+    .log-err  { color: #f27474; }
+    .log-info { color: #89b4fa; }
+
+    /* Resultado */
+    .resultado-erro-item { font-family: monospace; font-size: .8rem; }
+
+    /* Header status */
+    #status-conexao { font-size: .78rem; }
+
+    /* Mobile padding */
+    @media (max-width: 576px) {
+      .card-body { padding: 1.2rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Barra de topo ─────────────────────────────────────────────────────── -->
+<nav class="navbar navbar-dark bg-primary mb-4 px-3">
+  <span class="navbar-brand fw-bold fs-6">
+    <i class="bi bi-receipt me-2"></i>APACN – Nota Paraná
+  </span>
+  <span id="status-conexao" class="text-white-50 ms-auto">
+    <i class="bi bi-circle-fill text-warning me-1" style="font-size:.6rem"></i>Conectando...
+  </span>
+</nav>
+
+<div class="container" style="max-width:600px">
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- PG-LOGIN                                                               -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="pg-login" class="page ativo">
+    <div class="card">
+      <div class="card-body p-4">
+        <h5 class="card-title mb-1"><i class="bi bi-lock me-2 text-primary"></i>Entrar no Nota Paraná</h5>
+        <p class="text-muted small mb-4">Suas credenciais não são armazenadas no servidor.</p>
+
+        <div id="alerta-login" class="alert alert-danger d-none" role="alert"></div>
+
+        <form id="form-login" novalidate>
+          <div class="mb-3">
+            <label class="form-label">CPF (usuário)</label>
+            <input id="cpf" type="text" class="form-control" placeholder="000.000.000-00"
+                   inputmode="numeric" autocomplete="username" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">CNPJ da entidade</label>
+            <input id="cnpj" type="text" class="form-control" placeholder="00.000.000/0000-00"
+                   inputmode="numeric" autocomplete="organization" required>
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Senha</label>
+            <div class="input-group">
+              <input id="senha" type="password" class="form-control" autocomplete="current-password" required>
+              <button class="btn btn-outline-secondary" type="button" id="btn-toggle-senha" tabindex="-1">
+                <i class="bi bi-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-check mb-4">
+            <input class="form-check-input" type="checkbox" id="salvar-dados" checked>
+            <label class="form-check-label small" for="salvar-dados">
+              Lembrar CPF e CNPJ neste dispositivo
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100" id="btn-login">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Conectar
+          </button>
+        </form>
+
+        <div id="loading-login" class="d-none text-center mt-3">
+          <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+          <span id="msg-loading-login" class="text-muted small">Aguarde...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- PG-SCANNER                                                             -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="pg-scanner" class="page">
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0"><i class="bi bi-upc-scan me-2 text-primary"></i>Leitura de notas</h5>
+          <button class="btn btn-sm btn-outline-danger" id="btn-encerrar">
+            <i class="bi bi-box-arrow-right me-1"></i>Sair
+          </button>
+        </div>
+
+        <div id="alerta-scanner" class="alert d-none mb-3" role="alert"></div>
+
+        <label class="form-label small fw-semibold">
+          Aponte o leitor para o QR code ou código de barras:
+        </label>
+        <div class="input-group mb-1">
+          <span class="input-group-text"><i class="bi bi-upc"></i></span>
+          <input id="campo-scanner" type="text" class="form-control"
+                 placeholder="Escaneie ou digite a chave de acesso..."
+                 autocomplete="off" autocorrect="off" spellcheck="false">
+          <button class="btn btn-outline-secondary" id="btn-add-manual" title="Adicionar">
+            <i class="bi bi-plus-lg"></i>
+          </button>
+        </div>
+        <p class="text-muted" style="font-size:.72rem">
+          Pressione <kbd>Enter</kbd> após digitar, ou escaneie — o leitor USB funciona automaticamente.
+        </p>
+      </div>
+    </div>
+
+    <div class="card mb-3" id="card-lista">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-semibold small">
+            Notas na fila: <span id="contador-chaves" class="badge bg-primary">0</span>
+          </span>
+          <button class="btn btn-sm btn-link text-danger p-0" id="btn-limpar"
+                  style="font-size:.8rem" disabled>
+            <i class="bi bi-trash me-1"></i>Limpar lista
+          </button>
+        </div>
+
+        <div id="lista-chaves" class="list-group list-group-flush">
+          <div class="text-muted small text-center py-3" id="lista-vazia">
+            Nenhuma nota escaneada ainda.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-grid">
+      <button class="btn btn-success btn-lg" id="btn-doar" disabled>
+        <i class="bi bi-send me-2"></i>Confirmar e Doar Notas
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- PG-PROCESSANDO                                                         -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="pg-processando" class="page">
+    <div class="card">
+      <div class="card-body p-4">
+        <h5 class="mb-1"><i class="bi bi-send me-2 text-primary"></i>Enviando doações</h5>
+        <p id="msg-processando" class="text-muted small mb-3">Aguarde...</p>
+
+        <div class="progress mb-3" style="height:6px">
+          <div id="barra-progresso" class="progress-bar progress-bar-striped progress-bar-animated"
+               role="progressbar" style="width:0%"></div>
+        </div>
+        <p class="text-muted small mb-3" id="label-progresso">0 / 0</p>
+
+        <div id="log-progresso"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- PG-RESULTADO                                                           -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="pg-resultado" class="page">
+    <div class="card mb-3" id="card-resultado">
+      <div class="card-body p-4">
+        <div id="resultado-icone" class="text-center mb-3" style="font-size:2.5rem"></div>
+        <h5 id="resultado-titulo" class="text-center mb-3"></h5>
+
+        <div class="row text-center mb-3">
+          <div class="col">
+            <div class="fs-2 fw-bold text-success" id="res-sucesso">0</div>
+            <div class="text-muted small">doadas</div>
+          </div>
+          <div class="col">
+            <div class="fs-2 fw-bold text-danger" id="res-erro">0</div>
+            <div class="text-muted small">com erro</div>
+          </div>
+        </div>
+
+        <!-- Lista de erros -->
+        <div id="secao-erros" class="d-none">
+          <hr>
+          <p class="fw-semibold small mb-2"><i class="bi bi-exclamation-circle text-danger me-1"></i>Notas com erro:</p>
+          <div id="lista-erros" class="list-group list-group-flush"></div>
+        </div>
+
+        <!-- CNPJ inválido: pede correção -->
+        <div id="secao-cnpj-invalido" class="d-none mt-3">
+          <div class="alert alert-warning">
+            <strong><i class="bi bi-exclamation-triangle me-1"></i>CNPJ rejeitado pelo portal.</strong><br>
+            <span id="msg-cnpj-invalido" class="small"></span>
+          </div>
+          <label class="form-label small">Informe o CNPJ correto da entidade:</label>
+          <input id="cnpj-corrigido" type="text" class="form-control mb-2"
+                 placeholder="00.000.000/0000-00" inputmode="numeric">
+          <button class="btn btn-warning w-100" id="btn-retry-cnpj">
+            <i class="bi bi-arrow-clockwise me-1"></i>Tentar novamente com CNPJ corrigido
+          </button>
+        </div>
+
+        <!-- Limite de erros consecutivos -->
+        <div id="secao-limite-erros" class="d-none mt-3">
+          <div class="alert alert-warning small mb-0">
+            <i class="bi bi-pause-circle me-1"></i>
+            Lote interrompido após muitos erros consecutivos. As notas restantes
+            foram marcadas como não processadas.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-grid gap-2">
+      <button class="btn btn-primary" id="btn-mais-notas">
+        <i class="bi bi-plus-circle me-2"></i>Lançar mais notas
+      </button>
+      <button class="btn btn-outline-secondary" id="btn-encerrar-sessao">
+        <i class="bi bi-box-arrow-right me-2"></i>Encerrar sessão
+      </button>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+<script>
+// ============================================================
+// Validação de chave de acesso (Módulo 11 – SEFAZ)
+// ============================================================
+function calcularDV(chave43) {
+  const pesos = [];
+  for (let g = 0; g < 6; g++) for (let p = 2; p <= 9; p++) pesos.push(p);
+  let soma = 0;
+  for (let i = 0; i < 43; i++) soma += parseInt(chave43[42 - i]) * pesos[i];
+  const r = soma % 11;
+  return r < 2 ? 0 : 11 - r;
+}
+
+function extrairChave(entrada) {
+  let m;
+  m = entrada.match(/[?&]p=(\d{44})/);
+  if (m) return m[1];
+  m = entrada.match(/chNFe=(\d{44})/i);
+  if (m) return m[1];
+  m = entrada.match(/(?<!\d)(\d{44})(?!\d)/);
+  if (m) return m[1];
+  const limpa = entrada.replace(/[\s\-]/g, '');
+  if (/^\d{44}$/.test(limpa)) return limpa;
+  return null;
+}
+
+function validarChave(entrada) {
+  const chave = extrairChave(entrada);
+  if (!chave) return { valida: false, chave: null, motivo: 'Código não reconhecido' };
+  if (chave.substring(0, 2) !== '41')
+    return { valida: false, chave, motivo: `Estado '${chave.substring(0, 2)}' não é o Paraná (esperado 41)` };
+  const modelo = chave.substring(20, 22);
+  if (!['55', '65'].includes(modelo))
+    return { valida: false, chave, motivo: `Modelo '${modelo}' desconhecido (55=NF-e, 65=NFC-e)` };
+  if (calcularDV(chave.substring(0, 43)) !== parseInt(chave[43]))
+    return { valida: false, chave, motivo: 'Dígito verificador inválido' };
+  return { valida: true, chave, motivo: '' };
+}
+
+function fmtChave(chave) {
+  return chave.match(/.{1,4}/g).join(' ');
+}
+
+function soDigitos(s) {
+  return s.replace(/\D/g, '');
+}
+
+// ============================================================
+// Estado da aplicação
+// ============================================================
+const state = {
+  chaves: [],           // chaves válidas acumuladas no scanner
+  chavesRetry: [],      // chaves com erro para retry por CNPJ inválido
+  logado: false,
+};
+
+// ============================================================
+// Socket.IO
+// ============================================================
+const socket = io();
+
+socket.on('connect', () => {
+  setStatusBar('bi-circle-fill text-success', 'Conectado');
+});
+
+socket.on('disconnect', () => {
+  setStatusBar('bi-circle-fill text-danger', 'Desconectado');
+  state.logado = false;
+});
+
+socket.on('status', ({ mensagem }) => {
+  document.getElementById('msg-loading-login').textContent = mensagem;
+});
+
+socket.on('login_ok', () => {
+  state.logado = true;
+  hideLoading();
+  irPara('pg-scanner');
+  focusScanner();
+});
+
+socket.on('erro_login', ({ mensagem }) => {
+  hideLoading();
+  mostrarAlerta('alerta-login', mensagem, 'danger');
+  document.getElementById('btn-login').disabled = false;
+});
+
+socket.on('erro_sistema', ({ mensagem }) => {
+  hideLoading();
+  alert('Erro: ' + mensagem);
+  document.getElementById('btn-login').disabled = false;
+});
+
+socket.on('doacao_iniciada', ({ total }) => {
+  document.getElementById('msg-processando').textContent =
+    `Processando ${total} nota(s)...`;
+  document.getElementById('label-progresso').textContent = `0 / ${total}`;
+  document.getElementById('barra-progresso').style.width = '0%';
+  document.getElementById('log-progresso').innerHTML = '';
+  irPara('pg-processando');
+});
+
+socket.on('progresso', ({ numero, total, chave, sucesso, mensagem }) => {
+  const pct = Math.round(numero / total * 100);
+  document.getElementById('barra-progresso').style.width = pct + '%';
+  document.getElementById('label-progresso').textContent = `${numero} / ${total}`;
+  document.getElementById('msg-processando').textContent =
+    `Processando nota ${numero} de ${total}...`;
+
+  const log = document.getElementById('log-progresso');
+  const linha = document.createElement('div');
+  if (sucesso) {
+    linha.className = 'log-ok';
+    linha.textContent = `✓ #${String(numero).padStart(3,' ')}  ${fmtChave(chave)}`;
+  } else {
+    linha.className = 'log-err';
+    linha.textContent = `✗ #${String(numero).padStart(3,' ')}  ${fmtChave(chave)}`;
+    if (mensagem) {
+      const sub = document.createElement('div');
+      sub.style.paddingLeft = '1.8rem';
+      sub.style.color = '#f27474';
+      sub.style.fontSize = '.75rem';
+      sub.textContent = mensagem;
+      linha.appendChild(sub);
+    }
+  }
+  log.appendChild(linha);
+  log.scrollTop = log.scrollHeight;
+});
+
+socket.on('doacao_concluida', (res) => {
+  exibirResultado(res);
+});
+
+// ============================================================
+// Tela de login
+// ============================================================
+carregarDadosSalvos();
+
+document.getElementById('form-login').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const cpf   = soDigitos(document.getElementById('cpf').value);
+  const cnpj  = soDigitos(document.getElementById('cnpj').value);
+  const senha = document.getElementById('senha').value;
+
+  if (!cpf || !cnpj || !senha) {
+    mostrarAlerta('alerta-login', 'Preencha todos os campos.', 'danger');
+    return;
+  }
+  if (cnpj.length !== 14) {
+    mostrarAlerta('alerta-login', 'CNPJ deve ter 14 dígitos.', 'danger');
+    return;
+  }
+
+  esconderAlerta('alerta-login');
+  document.getElementById('btn-login').disabled = true;
+  document.getElementById('loading-login').classList.remove('d-none');
+  document.getElementById('msg-loading-login').textContent = 'Conectando...';
+
+  if (document.getElementById('salvar-dados').checked) {
+    localStorage.setItem('apacn_cpf',  document.getElementById('cpf').value);
+    localStorage.setItem('apacn_cnpj', document.getElementById('cnpj').value);
+  } else {
+    localStorage.removeItem('apacn_cpf');
+    localStorage.removeItem('apacn_cnpj');
+  }
+
+  socket.emit('fazer_login', { cpf, cnpj, senha });
+});
+
+document.getElementById('btn-toggle-senha').addEventListener('click', () => {
+  const campo = document.getElementById('senha');
+  const ico   = document.getElementById('btn-toggle-senha').querySelector('i');
+  if (campo.type === 'password') {
+    campo.type = 'text';
+    ico.className = 'bi bi-eye-slash';
+  } else {
+    campo.type = 'password';
+    ico.className = 'bi bi-eye';
+  }
+});
+
+// ============================================================
+// Tela de scanner
+// ============================================================
+const campoScanner = document.getElementById('campo-scanner');
+
+campoScanner.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    processarEntrada(campoScanner.value.trim());
+    campoScanner.value = '';
+  }
+});
+
+// Fallback: leitor sem Enter – detecta 44 dígitos consecutivos com debounce
+let debounceTimer = null;
+campoScanner.addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  const val = campoScanner.value.replace(/[\s\-]/g, '');
+  if (val.length >= 44) {
+    debounceTimer = setTimeout(() => {
+      processarEntrada(campoScanner.value.trim());
+      campoScanner.value = '';
+    }, 120);
+  }
+});
+
+document.getElementById('btn-add-manual').addEventListener('click', () => {
+  processarEntrada(campoScanner.value.trim());
+  campoScanner.value = '';
+  campoScanner.focus();
+});
+
+document.getElementById('btn-limpar').addEventListener('click', () => {
+  state.chaves = [];
+  renderLista();
+  esconderAlerta('alerta-scanner');
+  campoScanner.focus();
+});
+
+document.getElementById('btn-encerrar').addEventListener('click', () => {
+  if (!confirm('Deseja encerrar a sessão?')) return;
+  socket.emit('encerrar_sessao');
+  state.logado = false;
+  irPara('pg-login');
+  document.getElementById('btn-login').disabled = false;
+  hideLoading();
+});
+
+document.getElementById('btn-doar').addEventListener('click', () => {
+  if (state.chaves.length === 0) return;
+  socket.emit('iniciar_doacao', { chaves: state.chaves });
+});
+
+function processarEntrada(entrada) {
+  if (!entrada) return;
+  const { valida, chave, motivo } = validarChave(entrada);
+
+  if (!valida) {
+    mostrarAlerta('alerta-scanner',
+      `<i class="bi bi-x-circle me-1"></i><strong>Leitura inválida:</strong> ${motivo}`,
+      'danger');
+    return;
+  }
+
+  if (state.chaves.includes(chave)) {
+    mostrarAlerta('alerta-scanner',
+      `<i class="bi bi-exclamation-triangle me-1"></i>Nota já registrada (ignorada).`,
+      'warning');
+    return;
+  }
+
+  state.chaves.push(chave);
+  esconderAlerta('alerta-scanner');
+  renderLista();
+  campoScanner.focus();
+}
+
+function renderLista() {
+  const lista = document.getElementById('lista-chaves');
+  const vazia = document.getElementById('lista-vazia');
+  const cont  = document.getElementById('contador-chaves');
+
+  cont.textContent = state.chaves.length;
+  document.getElementById('btn-limpar').disabled = state.chaves.length === 0;
+  document.getElementById('btn-doar').disabled   = state.chaves.length === 0;
+
+  if (state.chaves.length === 0) {
+    lista.innerHTML = '';
+    vazia.style.display = 'block';
+    return;
+  }
+  vazia.style.display = 'none';
+
+  lista.innerHTML = state.chaves.map((c, i) => `
+    <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-start py-2 px-0 chave-item">
+      <div>
+        <span class="badge bg-primary me-2">${i + 1}</span>
+        ${fmtChave(c)}
+      </div>
+      <button class="btn btn-sm btn-link text-danger p-0 ms-2" onclick="removerChave(${i})" title="Remover">
+        <i class="bi bi-x"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+function removerChave(idx) {
+  state.chaves.splice(idx, 1);
+  renderLista();
+}
+
+// ============================================================
+// Tela de resultado
+// ============================================================
+function exibirResultado(res) {
+  document.getElementById('res-sucesso').textContent = res.sucesso;
+  document.getElementById('res-erro').textContent    = res.erro;
+
+  const icone   = document.getElementById('resultado-icone');
+  const titulo  = document.getElementById('resultado-titulo');
+  const card    = document.getElementById('card-resultado');
+
+  if (res.erro === 0) {
+    icone.innerHTML  = '<i class="bi bi-check-circle-fill text-success"></i>';
+    titulo.textContent = 'Doação concluída com sucesso!';
+    titulo.className   = 'text-center mb-3 text-success';
+    card.classList.remove('border-danger', 'border-warning');
+  } else if (res.sucesso === 0) {
+    icone.innerHTML  = '<i class="bi bi-x-circle-fill text-danger"></i>';
+    titulo.textContent = 'Nenhuma doação realizada';
+    titulo.className   = 'text-center mb-3 text-danger';
+  } else {
+    icone.innerHTML  = '<i class="bi bi-exclamation-circle-fill text-warning"></i>';
+    titulo.textContent = 'Doação parcialmente concluída';
+    titulo.className   = 'text-center mb-3 text-warning';
+  }
+
+  // Lista de erros
+  const secaoErros = document.getElementById('secao-erros');
+  if (res.erro > 0 && !res.cnpj_invalido) {
+    secaoErros.classList.remove('d-none');
+    const listaErros = document.getElementById('lista-erros');
+    listaErros.innerHTML = res.erros_com_mensagem.map(([chave, msg]) => `
+      <div class="list-group-item py-2 px-0 resultado-erro-item">
+        <div class="text-danger small">${fmtChave(chave)}</div>
+        <div class="text-muted" style="font-size:.72rem">${msg}</div>
+      </div>
+    `).join('');
+  } else {
+    secaoErros.classList.add('d-none');
+  }
+
+  // CNPJ inválido
+  const secaoCnpj = document.getElementById('secao-cnpj-invalido');
+  if (res.cnpj_invalido) {
+    secaoCnpj.classList.remove('d-none');
+    state.chavesRetry = res.erros_com_mensagem.map(([c]) => c);
+    const primMsg = res.erros_com_mensagem[0]?.[1] ?? '';
+    document.getElementById('msg-cnpj-invalido').textContent = primMsg;
+    // Pré-preenche com o CNPJ atual salvo
+    document.getElementById('cnpj-corrigido').value =
+      document.getElementById('cnpj').value;
+  } else {
+    secaoCnpj.classList.add('d-none');
+    state.chavesRetry = [];
+  }
+
+  // Limite de erros
+  if (res.parou_por_limite_erros) {
+    document.getElementById('secao-limite-erros').classList.remove('d-none');
+  } else {
+    document.getElementById('secao-limite-erros').classList.add('d-none');
+  }
+
+  irPara('pg-resultado');
+}
+
+document.getElementById('btn-retry-cnpj').addEventListener('click', () => {
+  const cnpjCorr = soDigitos(document.getElementById('cnpj-corrigido').value);
+  if (cnpjCorr.length !== 14) {
+    alert('CNPJ deve ter 14 dígitos.');
+    return;
+  }
+  // Atualiza o campo de login também
+  document.getElementById('cnpj').value = document.getElementById('cnpj-corrigido').value;
+
+  irPara('pg-processando');
+  document.getElementById('log-progresso').innerHTML = '';
+  socket.emit('iniciar_doacao', {
+    chaves: state.chavesRetry,
+    cnpj: cnpjCorr,
+  });
+});
+
+document.getElementById('btn-mais-notas').addEventListener('click', () => {
+  state.chaves = [];
+  renderLista();
+  irPara('pg-scanner');
+  focusScanner();
+});
+
+document.getElementById('btn-encerrar-sessao').addEventListener('click', () => {
+  socket.emit('encerrar_sessao');
+  state.logado = false;
+  state.chaves = [];
+  renderLista();
+  irPara('pg-login');
+  document.getElementById('btn-login').disabled = false;
+  hideLoading();
+});
+
+// ============================================================
+// Helpers
+// ============================================================
+function irPara(pgId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('ativo'));
+  document.getElementById(pgId).classList.add('ativo');
+}
+
+function focusScanner() {
+  setTimeout(() => document.getElementById('campo-scanner').focus(), 100);
+}
+
+function mostrarAlerta(id, html, tipo) {
+  const el = document.getElementById(id);
+  el.className = `alert alert-${tipo}`;
+  el.innerHTML = html;
+  el.classList.remove('d-none');
+}
+
+function esconderAlerta(id) {
+  document.getElementById(id).classList.add('d-none');
+}
+
+function hideLoading() {
+  document.getElementById('loading-login').classList.add('d-none');
+}
+
+function setStatusBar(iconClass, texto) {
+  document.getElementById('status-conexao').innerHTML =
+    `<i class="bi ${iconClass} me-1" style="font-size:.6rem"></i>${texto}`;
+}
+
+function carregarDadosSalvos() {
+  const cpf  = localStorage.getItem('apacn_cpf');
+  const cnpj = localStorage.getItem('apacn_cnpj');
+  if (cpf)  document.getElementById('cpf').value  = cpf;
+  if (cnpj) document.getElementById('cnpj').value = cnpj;
+}
+</script>
+</body>
+</html>
