@@ -15,13 +15,25 @@ from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Localiza o driver do Playwright (Node.js embutido + pacote JS)
+# O caminho varia conforme a versão do Playwright:
+#   >= 1.40 : playwright/driver/
+#   antigas : playwright/_impl/_driver/
 # ---------------------------------------------------------------------------
 import playwright as _pw
-_pw_driver = Path(_pw.__file__).parent / "_impl" / "_driver"
-if not _pw_driver.exists():
+_pw_pkg = Path(_pw.__file__).parent
+
+_driver_candidates = [
+    _pw_pkg / "driver",
+    _pw_pkg / "_impl" / "_driver",
+]
+_pw_driver = next((p for p in _driver_candidates if p.exists()), None)
+
+if _pw_driver is None:
+    _found = [str(p) for p in _pw_pkg.iterdir()]
     raise SystemExit(
-        f"[apacn.spec] Driver do Playwright não encontrado em {_pw_driver}.\n"
-        "Certifique-se de que 'playwright' está instalado no ambiente de build."
+        f"[apacn.spec] Driver do Playwright nao encontrado.\n"
+        f"Conteudo do pacote: {_found}\n"
+        "Certifique-se de que 'playwright' esta instalado no ambiente de build."
     )
 print(f"[apacn.spec] Driver Playwright: {_pw_driver}")
 
@@ -58,8 +70,9 @@ a = Analysis(
     binaries=[],
     datas=[
         # Driver do Playwright (Node.js + pacote JS)
-        (str(_pw_driver), "playwright/_impl/_driver"),
-        # Chromium embutido — mapeado em pw-browsers/<nome-do-diretório>
+        # Mantém a mesma estrutura relativa que tem no site-packages
+        (str(_pw_driver), f"playwright/{_pw_driver.relative_to(_pw_pkg)}"),
+        # Chromium embutido
         (str(_chromium_path), f"pw-browsers/{_chromium_path.name}"),
     ],
     hiddenimports=[
