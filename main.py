@@ -23,8 +23,8 @@ Uso:
 """
 
 import argparse
-
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -41,8 +41,14 @@ from notaparana_bot import (
     LIMITE_ERROS_CHAVE,
 )
 
-# Arquivo de configuração local (não versionado)
-_CONFIG_PATH = Path(__file__).parent / "config.json"
+# Arquivo de configuração local (não versionado).
+# Quando executado como .exe instalado em Program Files, salva no AppData do
+# usuário para evitar PermissionError em pastas sem escrita.
+if getattr(sys, "frozen", False):
+    _CONFIG_PATH = Path(os.environ.get("APPDATA", Path.home())) / "APACN" / "config.json"
+    _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+else:
+    _CONFIG_PATH = Path(__file__).parent / "config.json"
 
 
 # ---------------------------------------------------------------------------

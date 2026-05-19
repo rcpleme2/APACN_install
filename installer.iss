@@ -24,7 +24,6 @@ DefaultGroupName={#AppName}
 AllowNoIcons=yes
 OutputDir=dist\installer
 OutputBaseFilename=APACN_Setup_v{#AppVersion}
-SetupIconFile=apacn.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
