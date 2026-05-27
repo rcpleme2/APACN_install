@@ -1,0 +1,68 @@
+============================================================
+  APACN - Nota Parana  |  Instalacao no Linux
+============================================================
+
+REQUISITOS
+----------
+  - Conexao com internet (para baixar dependencias, ~200 MB)
+  - Senha de administrador do computador (sudo)
+
+
+PASSO A PASSO
+-------------
+
+  1. Extraia o arquivo ZIP em uma pasta de sua escolha.
+     Exemplo: /home/seu-usuario/APACN
+
+  2. Abra o terminal.
+     (Pressione Ctrl+Alt+T  ou procure "Terminal" no menu)
+
+  3. Navegue ate a pasta onde extraiu os arquivos.
+     Substitua o caminho pelo local correto:
+
+         cd /home/seu-usuario/APACN
+
+  4. Dê permissão de execução ao instalador:
+
+         chmod +x install.sh
+
+  5. Execute o instalador:
+
+         ./install.sh
+
+  6. Quando o instalador pedir a senha, digite a senha do
+     seu computador e pressione Enter.
+     (Os caracteres nao aparecem na tela — isso e normal.)
+
+  7. Aguarde a instalacao terminar.
+     O download do Chromium pode levar de 3 a 10 minutos
+     dependendo da velocidade da internet.
+
+  8. Quando aparecer "INSTALACAO CONCLUIDA", o programa
+     esta pronto para uso.
+
+
+COMO USAR
+---------
+
+  Opcao 1 — Pelo terminal, digite:
+
+      apacn
+
+  Opcao 2 — Clique no atalho "APACN - Nota Parana"
+             na sua area de trabalho (se disponivel).
+
+  IMPORTANTE: Se o comando "apacn" nao for reconhecido,
+  feche o terminal, abra um novo e tente novamente.
+
+
+DESINSTALAR
+-----------
+
+  Abra o terminal e execute os comandos abaixo:
+
+      rm -rf ~/.local/share/apacn
+      rm -f  ~/.local/bin/apacn
+      rm -f  ~/Desktop/APACN.desktop
+
+============================================================
